@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- TG-SCRIPT: скрипт Telegram Mini Apps, по документации — в <head> перед остальными скриптами -->
+<script src="https://telegram.org/js/telegram-web-app.js?64"></script>
+<title>Звёздная лавка</title>
+<meta name="AURAPAY_12GLLN9PnynywPsg" content="undefined">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Manrope:wght@400;500;600;700;800&display=swap">
+<style>
+/* Макет: одна колонка до 480px — витрина «сколько звёзд» сверху, пакеты, получатель,
+   оплата, итог; кнопка заказа закреплена внизу. Четыре скина — data-skin на <html>. */
+:root {
+  --font-display: "Unbounded", "Manrope", system-ui, sans-serif;
+  --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 18px;
+  --radius-sm: 12px;
+  /* скин по умолчанию — синий; остальные переопределяют те же токены */
+  --bg: #060a1a;
+  --surface: #0e1530;
+  --surface-2: #16204a;
+  --line: rgba(140, 170, 255, .16);
+  --text: #eef2ff;
+  --muted: #8f9bc4;
+  --a: #3d7bff;
+  --b: #22d3ee;
+  --on: #ffffff;
+  --danger: #ff6b7d;
+  --ok: #3ee39a;
+  color-scheme: dark;
+}
+:root[data-skin="gold"] {
+  --bg: #0a0a09; --surface: #161613; --surface-2: #22211b;
+  --line: rgba(255, 214, 10, .18); --text: #fbf8ec; --muted: #a8a38c;
+  --a: #ffd60a; --b: #ff9500; --on: #0a0a09; --danger: #ff6b5b; --ok: #b6f24a;
+}
+:root[data-skin="green"] {
+  --bg: #03100b; --surface: #0a1d16; --surface-2: #10301f;
+  --line: rgba(80, 240, 170, .16); --text: #ecfdf5; --muted: #84b7a0;
+  --a: #10e58f; --b: #c4f042; --on: #03100b; --danger: #ff7a7a; --ok: #10e58f;
+}
+:root[data-skin="red"] {
+  --bg: #12050a; --surface: #200b13; --surface-2: #31101d;
+  --line: rgba(255, 110, 130, .18); --text: #fff1f2; --muted: #c4959e;
+  --a: #f0174a; --b: #ff8a3d; --on: #ffffff; --danger: #ffb4a8; --ok: #5ee6a8;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { min-height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color .35s ease;
+}
+.glow {
+  position: fixed; inset: -20vh -30vw auto; height: 70vh; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(40% 50% at 30% 40%, color-mix(in srgb, var(--a) 55%, transparent), transparent 70%),
+    radial-gradient(35% 45% at 75% 30%, color-mix(in srgb, var(--b) 45%, transparent), transparent 70%);
+  filter: blur(40px); opacity: .45;
+}
+.app {
+  position: relative; z-index: 1;
+  max-width: 480px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 14px 120px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+
+/* ---------- шапка ---------- */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mark {
+  width: 38px; height: 38px; border-radius: 12px; flex: none;
+  background: linear-gradient(135deg, var(--a), var(--b));
+  display: grid; place-items: center;
+}
+.mark svg { width: 22px; height: 22px; }
+.brand-name { font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: .01em; }
+.brand-sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand > div:last-child { min-width: 0; }
+.rate {
+  flex: none; font-size: 12.5px; font-weight: 700; padding: 7px 11px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line); font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.skins { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.skins button {
+  width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer;
+  outline-offset: 2px;
+}
+.skins button[aria-pressed="true"] { border-color: var(--text); }
+.skins [data-s="blue"]  { background: linear-gradient(135deg, #3d7bff, #22d3ee); }
+.skins [data-s="gold"]  { background: linear-gradient(135deg, #ffd60a 50%, #0a0a09 50%); }
+.skins [data-s="green"] { background: linear-gradient(135deg, #10e58f, #c4f042); }
+.skins [data-s="red"]   { background: linear-gradient(135deg, #f0174a, #ff8a3d); }
+
+/* ---------- витрина ---------- */
+.hero {
+  position: relative; overflow: hidden;
+  border-radius: 24px; padding: 18px 18px 16px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--a) 22%, var(--surface)), var(--surface) 60%);
+  border: 1px solid var(--line);
+}
+.label {
+  font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+}
+.amount-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.big-star { width: 40px; height: 40px; flex: none; }
+#amount {
+  min-width: 0; width: 100%;
+  font-family: var(--font-display); font-weight: 800; font-size: clamp(40px, 13vw, 56px);
+  line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  background: linear-gradient(90deg, var(--a), var(--b));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  caret-color: var(--a);
+  border: 0; outline: none; padding: 0;
+}
+#amount:focus-visible { text-decoration: underline 2px color-mix(in srgb, var(--a) 50%, transparent); text-underline-offset: 8px; }
+.price-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.price-line .sum { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.price-line .hint { font-size: 12.5px; color: var(--muted); text-align: right; }
+.range-wrap { margin-top: 14px; }
+input[type="range"] {
+  width: 100%; height: 28px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--a), var(--b)) 0 / var(--fill, 0%) 100% no-repeat, var(--surface-2);
+}
+input[type="range"]::-moz-range-track { height: 6px; border-radius: 6px; background: var(--surface-2); }
+input[type="range"]::-moz-range-progress { height: 6px; border-radius: 6px; background: linear-gradient(90deg, var(--a), var(--b)); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 24px; height: 24px; margin-top: -9px; border-radius: 50%;
+  background: var(--text); border: 4px solid var(--a); box-shadow: 0 2px 10px rgba(0,0,0,.4);
+}
+input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--text); border: 4px solid var(--a); }
+input[type="range"]:focus-visible { outline: 2px solid var(--a); outline-offset: 4px; border-radius: 8px; }
+.range-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.err { color: var(--danger); font-size: 12.5px; font-weight: 600; min-height: 1em; }
+
+/* ---------- блоки ---------- */
+.block { display: flex; flex-direction: column; gap: 10px; }
+.block-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 8px; }
+.block-head h2 { white-space: nowrap; }
+.block-head h2 { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 15px; letter-spacing: .01em; }
+.block-head small { color: var(--muted); font-size: 12px; }
+
+.packs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pack {
+  position: relative; text-align: left; cursor: pointer; font: inherit; color: inherit;
+  padding: 12px 10px 10px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 2px;
+  transition: transform .12s ease, border-color .2s ease, background-color .2s ease;
+}
+.pack:active { transform: scale(.97); }
+.pack .n { font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 4px; }
+.pack .n svg { width: 14px; height: 14px; }
+.pack .p { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pack .off {
+  position: absolute; top: -7px; right: 8px; font-size: 10.5px; font-weight: 800;
+  padding: 2px 6px; border-radius: 6px; background: linear-gradient(90deg, var(--a), var(--b)); color: var(--on);
+}
+.pack[aria-pressed="true"] { border-color: var(--a); background: color-mix(in srgb, var(--a) 14%, var(--surface)); }
+.pack:focus-visible, .seg button:focus-visible, .cta:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--a); outline-offset: 2px;
+}
+
+.seg {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line);
+}
+.seg button {
+  font: inherit; font-weight: 700; color: var(--muted); background: transparent; border: 0;
+  padding: 9px; border-radius: 10px; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--surface-2); color: var(--text); }
+.field {
+  display: flex; align-items: center; gap: 6px; padding: 0 14px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px solid var(--line);
+}
+.field:focus-within { border-color: var(--a); }
+.field span { color: var(--muted); font-weight: 700; }
+.field input {
+  flex: 1; min-width: 0; font: inherit; font-weight: 600; color: var(--text); background: transparent;
+  border: 0; outline: none; padding: 13px 0;
+}
+.field input::placeholder { color: color-mix(in srgb, var(--muted) 70%, transparent); }
+
+
+.summary {
+  border-radius: var(--radius); padding: 14px 16px; background: var(--surface); border: 1px solid var(--line);
+  display: grid; grid-template-columns: 1fr auto; gap: 7px 12px; font-variant-numeric: tabular-nums;
+}
+.summary dt { color: var(--muted); }
+.summary dd { margin: 0; text-align: right; font-weight: 700; }
+.summary .total { padding-top: 9px; border-top: 1px dashed var(--line); font-size: 17px; font-weight: 800; color: var(--text); }
+.summary dd.total { font-family: var(--font-display); }
+.note { margin: 0 4px; font-size: 12.5px; color: var(--muted); text-wrap: pretty; }
+
+.faq { display: flex; flex-direction: column; gap: 6px; }
+.faq details { border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line); }
+.faq summary {
+  list-style: none; cursor: pointer; padding: 12px 14px; font-weight: 700;
+  display: flex; justify-content: space-between; gap: 10px; border-radius: var(--radius-sm);
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; color: var(--muted); font-weight: 800; }
+.faq details[open] summary::after { content: "−"; }
+.faq p { margin: 0; padding: 0 14px 12px; color: var(--muted); font-size: 13.5px; }
+.legal { font-size: 11.5px; color: var(--muted); text-align: center; text-wrap: balance; margin: 4px 8px 0; }
+
+/* ---------- кнопка заказа ---------- */
+.bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-top: 12px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(to top, var(--bg) 65%, transparent);
+}
+.cta {
+  display: block; width: 100%; max-width: 448px; margin: 0 auto;
+  font: inherit; font-weight: 800; font-size: 16px; color: var(--on); cursor: pointer;
+  border: 0; border-radius: 16px; padding: 16px;
+  background: linear-gradient(90deg, var(--a), var(--b));
+  box-shadow: 0 10px 30px -10px color-mix(in srgb, var(--a) 70%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.cta:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
+
+/* ---------- экран «заказ оформлен» ---------- */
+.done { display: flex; flex-direction: column; gap: 14px; padding-top: 8px; }
+.done-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.check {
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--a), var(--b)); color: var(--on);
+}
+.done h1 { margin: 0; font-family: var(--font-display); font-size: 22px; text-wrap: balance; }
+.done p { margin: 0; color: var(--muted); }
+.code {
+  display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1px dashed var(--a);
+}
+.code code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; font-weight: 700; }
+.ghost {
+  font: inherit; font-weight: 700; color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; cursor: pointer; flex: none;
+}
+.steps { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; counter-reset: s; }
+.steps li {
+  counter-increment: s; display: flex; gap: 12px; align-items: flex-start;
+  padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--line);
+}
+.steps li::before {
+  content: counter(s); flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 800; font-size: 12px; background: var(--surface-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="glow" aria-hidden="true"></div>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="var(--a)"></stop><stop offset="1" stop-color="var(--b)"></stop>
+    </linearGradient>
+    <symbol id="star" viewBox="0 0 24 24">
+      <path d="M12 2.2l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17l-5.9 3.3 1.3-6.6L2.5 9.1l6.6-.8z" stroke-linejoin="round"></path>
+    </symbol>
+  </defs>
+</svg>
+
+<main class="app" id="shop">
+  <header class="top">
+    <div class="brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="var(--on)"><use href="#star"></use></svg></div>
+      <div>
+        <div class="brand-name" id="shopName">Звёздная лавка</div>
+        <div class="brand-sub">звёзды Telegram за секунды</div>
+      </div>
+    </div>
+    <div class="rate" id="rate">1 ⭐ = 1,37 ₽</div>
+  </header>
+
+  <div class="skins" id="skins">
+    <span>Стиль</span>
+    <button type="button" data-s="blue" aria-label="Синий градиент"></button>
+    <button type="button" data-s="gold" aria-label="Жёлто-чёрный градиент"></button>
+    <button type="button" data-s="green" aria-label="Зелёный градиент"></button>
+    <button type="button" data-s="red" aria-label="Красный градиент"></button>
+  </div>
+
+  <section class="hero" aria-labelledby="amountLabel">
+    <label class="label" id="amountLabel" for="amount">Сколько звёзд</label>
+    <div class="amount-row">
+      <svg class="big-star" viewBox="0 0 24 24" fill="url(#g)"><use href="#star"></use></svg>
+      <input id="amount" type="text" inputmode="numeric" autocomplete="off" value="500" aria-describedby="amountErr">
+    </div>
+    <div class="price-line">
+      <span class="sum" id="heroSum">685 ₽</span>
+      <span class="hint" id="heroHint">от 50 до 100 000 ⭐</span>
+    </div>
+    <div class="range-wrap">
+      <input id="range" type="range" min="0" max="1000" step="1" aria-label="Количество звёзд, ползунок">
+      <div class="range-scale"><span id="scaleMin">50</span><span id="scaleMax">100 000</span></div>
+    </div>
+    <div class="err" id="amountErr" role="status"></div>
+  </section>
+
+  <section class="block" aria-labelledby="packsH">
+    <div class="block-head"><h2 id="packsH">Готовые пакеты</h2><small id="discountNote"></small></div>
+    <div class="packs" id="packs"></div>
+  </section>
+
+  <section class="block" aria-labelledby="toH">
+    <div class="block-head"><h2 id="toH">Кому</h2><small>звёзды придут на этот аккаунт</small></div>
+    <div class="seg" id="who">
+      <button type="button" data-who="me" aria-pressed="true">Себе</button>
+      <button type="button" data-who="friend" aria-pressed="false">Другу</button>
+    </div>
+    <label class="field" for="username">
+      <span>@</span>
+      <input id="username" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+             placeholder="username" maxlength="32" aria-describedby="userErr">
+    </label>
+    <div class="err" id="userErr" role="status"></div>
+  </section>
+
+
+  <section class="block" aria-labelledby="sumH">
+    <div class="block-head"><h2 id="sumH">Итого</h2></div>
+    <dl class="summary" id="summary"></dl>
+    <p class="note" id="note"></p>
+  </section>
+
+  <section class="block" aria-labelledby="faqH">
+    <div class="block-head"><h2 id="faqH">Вопросы</h2></div>
+    <div class="faq" id="faq"></div>
+  </section>
+
+  <p class="legal">Неофициальный магазин частного продавца. Не связан с Telegram.</p>
+</main>
+
+<main class="app done" id="done" hidden>
+  <div class="done-head">
+    <div class="check"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></div>
+    <h1 id="doneTitle">Заказ собран</h1>
+    <p id="doneText"></p>
+  </div>
+  <div id="fallback" hidden>
+    <div class="block">
+      <div class="block-head"><h2>Отправьте заказ боту</h2></div>
+      <div class="code"><code id="orderCode"></code><button type="button" class="ghost" id="copyBtn">Копировать</button></div>
+      <button type="button" class="cta" id="openBot">Открыть бота</button>
+    </div>
+  </div>
+  <ol class="steps" id="steps"></ol>
+  <button type="button" class="ghost" id="backBtn">Изменить заказ</button>
+</main>
+
+<div class="bar" id="bar"><button type="button" class="cta" id="cta">Оформить</button></div>
+
+<script>
+/* =====================================================================
+   НАСТРОЙКИ ВИТРИНЫ. Приложение только собирает «сколько звёзд и кому» и отдаёт боту.
+   Точную цену, варианты подарков, промокод и оплату считает бот (handlers/shop.py).
+   Цену, лимиты, имя бота и стиль бот сам передаёт в ссылке (handlers/webapp.py → app_link):
+   index.html?price=1.37&min=13&max=100000&bot=имя_бота&skin=gold&picker=0
+   ===================================================================== */
+const CONFIG = {
+  shopName: "Звёздная лавка",              // пример — название вашего магазина
+  botUsername: "your_star_shop_bot",        // подставит бот из ссылки
+  pricePerStar: 1.37,                       // ₽ за 1 звезду — только для ориентира, точную сумму считает бот
+  minStars: 13,
+  maxStars: 100000,
+  packages: [50, 100, 250, 500, 1000, 2500],
+  discounts: [],                            // скидки — в боте (промокоды), здесь не нужны
+  faq: [
+    ["Как я получу звёзды?", "Звёзды приходят подарками на аккаунт получателя. Подарок нужно обменять на звёзды в профиле — это пара нажатий."],
+    ["Сколько ждать?", "Подарки начинают приходить через несколько секунд после оплаты."],
+    ["Как оплатить?", "В боте: с баланса или через CryptoBot. Промокод применится сам."],
+    ["Почему звёзд чуть больше, чем я просил?", "Подарки бывают только фиксированного номинала. Если ровно не собрать, бот выдаст на 1–4 ⭐ больше или предложит два варианта."],
+    ["Можно купить другу?", "Да: выберите «Другу» и укажите его @username."],
+    ["Что если звёзды не пришли?", "Напишите в поддержку бота номер заказа."],
+  ],
+  defaultSkin: "blue",                      // blue | gold | green | red
+  showSkinPicker: true,                     // false — покупатели не видят переключатель стилей
+};
+
+/* ---------- параметры из ссылки (бот задаёт цену, чтобы она была одна) ---------- */
+(function readParams() {
+  let q;
+  try { q = new URLSearchParams(location.search); } catch (e) { return; }
+  const num = (k) => { const v = parseFloat(q.get(k)); return Number.isFinite(v) && v > 0 ? v : null; };
+  if (num("price")) CONFIG.pricePerStar = num("price");
+  if (num("min")) CONFIG.minStars = Math.round(num("min"));
+  if (num("max")) CONFIG.maxStars = Math.round(num("max"));
+  if (q.get("bot")) CONFIG.botUsername = q.get("bot").replace(/[^A-Za-z0-9_]/g, "");
+  if (q.get("skin")) CONFIG.defaultSkin = q.get("skin");
+  if (q.get("picker") === "0") CONFIG.showSkinPicker = false;
+})();
+
+const tg = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.platform !== "unknown"
+  ? window.Telegram.WebApp : null;
+const $ = (id) => document.getElementById(id);
+const SKINS = ["blue", "gold", "green", "red"];
+const rub = (v) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(v) + " ₽";
+const rub2 = (v) => new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v) + " ₽";
+const int = (v) => new Intl.NumberFormat("ru-RU").format(v);
+
+const state = { stars: 500, who: "me", user: "" };
+
+/* ---------- цена ---------- */
+function discountPct(stars) {
+  let pct = 0;
+  for (const d of CONFIG.discounts) if (stars >= d.from) pct = Math.max(pct, d.pct);
+  return pct;
+}
+function quote(stars) {
+  const base = stars * CONFIG.pricePerStar;
+  const pct = discountPct(stars);
+  const total = Math.ceil(base * (1 - pct / 100));
+  return { base, pct, total, saved: Math.round(base) - total };
+}
+
+/* ---------- ползунок: логарифмическая шкала, чтобы и 50, и 50 000 было удобно ставить ---------- */
+const toRange = (s) => Math.round(1000 * Math.log(s / CONFIG.minStars) / Math.log(CONFIG.maxStars / CONFIG.minStars));
+function fromRange(r) {
+  const raw = CONFIG.minStars * Math.pow(CONFIG.maxStars / CONFIG.minStars, r / 1000);
+  const step = raw < 200 ? 10 : raw < 1000 ? 50 : raw < 10000 ? 100 : 1000;
+  return Math.min(CONFIG.maxStars, Math.max(CONFIG.minStars, Math.round(raw / step) * step));
+}
+
+/* ---------- скины ---------- */
+function setSkin(name) {
+  if (!SKINS.includes(name)) name = "blue";
+  document.documentElement.setAttribute("data-skin", name);
+  document.querySelectorAll("#skins button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === name)));
+  try { localStorage.setItem("shop-skin", name); } catch (e) {}
+  if (tg) {
+    const css = getComputedStyle(document.documentElement);
+    const bg = css.getPropertyValue("--bg").trim();
+    try { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); tg.setBottomBarColor && tg.setBottomBarColor(bg); } catch (e) {}
+    paintMainButton();
+  }
+}
+
+/* ---------- отрисовка ---------- */
+function renderStatic() {
+  $("shopName").textContent = CONFIG.shopName;
+  document.title = CONFIG.shopName;
+  $("rate").textContent = "1 ⭐ = " + rub2(CONFIG.pricePerStar);
+  $("heroHint").textContent = `от ${int(CONFIG.minStars)} до ${int(CONFIG.maxStars)} ⭐`;
+  $("scaleMin").textContent = int(CONFIG.minStars);
+  $("scaleMax").textContent = int(CONFIG.maxStars);
+  $("skins").hidden = !CONFIG.showSkinPicker;
+  const d = CONFIG.discounts.slice().sort((a, b) => a.from - b.from);
+  $("discountNote").textContent = d.length ? "скидка " + d.map((x) => `−${x.pct}% от ${int(x.from)}`).join(", ") : "";
+
+  $("packs").innerHTML = "";
+  for (const n of CONFIG.packages.filter((n) => n >= CONFIG.minStars && n <= CONFIG.maxStars)) {
+    const q = quote(n);
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "pack"; b.dataset.n = n;
+    b.innerHTML = `<span class="n">${int(n)} <svg viewBox="0 0 24 24" fill="url(#g)"><use href="#star"></use></svg></span>`
+      + `<span class="p">${rub(q.total)}</span>` + (q.pct ? `<span class="off">−${q.pct}%</span>` : "");
+    b.addEventListener("click", () => { setStars(n); haptic("select"); });
+    $("packs").appendChild(b);
+  }
+
+  $("faq").innerHTML = "";
+  for (const [q, a] of CONFIG.faq) {
+    const d = document.createElement("details");
+    const s = document.createElement("summary"); s.textContent = q;
+    const p = document.createElement("p"); p.textContent = a;
+    d.append(s, p); $("faq").appendChild(d);
+  }
+}
+
+function validStars(n) { return Number.isInteger(n) && n >= CONFIG.minStars && n <= CONFIG.maxStars; }
+// Как normalize_username в боте: 4–32 символа, латиница, цифры и «_»
+function validUser(u) { return /^[A-Za-z0-9_]{4,32}$/.test(u); }
+
+function render() {
+  const n = state.stars;
+  const okStars = validStars(n);
+  const q = okStars ? quote(n) : null;
+  $("heroSum").textContent = q ? rub(q.total) : "—";
+  $("amountErr").textContent = okStars ? ""
+    : `Можно от ${int(CONFIG.minStars)} до ${int(CONFIG.maxStars)} звёзд, целым числом.`;
+  const r = $("range");
+  if (okStars && document.activeElement !== r) r.value = toRange(n);
+  r.style.setProperty("--fill", (r.value / 10) + "%");
+  document.querySelectorAll(".pack").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.n === n)));
+
+  const u = state.user;
+  const okUser = validUser(u);
+  $("userErr").textContent = u && !okUser ? "Проверьте имя: 4–32 символа, латиница, цифры и «_»." :
+    (!u && state.who === "me" ? "У вашего аккаунта нет @username — укажите его в настройках Telegram или впишите другой." : "");
+
+  const rows = [["Звёзды", okStars ? int(n) + " ⭐" : "—"], ["Цена за звезду", rub2(CONFIG.pricePerStar)]];
+  if (q && q.pct) rows.push([`Скидка ${q.pct}%`, "−" + rub(q.saved)]);
+  rows.push(["Получатель", okUser ? "@" + u : "—"], ["Оплата", "в боте"]);
+  $("summary").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(v)}</dd>`).join("")
+    + `<dt class="total">Примерно</dt><dd class="total">${q ? "≈ " + rub(q.total) : "—"}</dd>`;
+  $("note").textContent = "Точную сумму покажет бот: звёзды приходят подарками фиксированного номинала, "
+    + "поэтому их может быть на 1–4 больше. Скидка по промокоду учтётся там же.";
+
+  const ready = okStars && okUser;
+  $("cta").disabled = !ready;
+  $("cta").textContent = ready ? `Продолжить · ≈ ${rub(q.total)}` : (okStars ? "Укажите получателя" : "Проверьте количество");
+  paintMainButton(ready, q);
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+function setStars(n) { state.stars = n; $("amount").value = String(n); render(); }
+
+/* ---------- кнопка Telegram внизу (в браузере — своя кнопка) ---------- */
+let mbReady = false, mbQuote = null;
+function paintMainButton(ready = mbReady, q = mbQuote) {
+  mbReady = ready; mbQuote = q;
+  if (!tg || !tg.MainButton || !$("done").hidden) return;
+  const css = getComputedStyle(document.documentElement);
+  try {
+    tg.MainButton.setParams({
+      text: ready ? `Продолжить · ≈ ${rub(q.total)}` : "Заполните заказ",
+      color: css.getPropertyValue("--a").trim(), text_color: css.getPropertyValue("--on").trim(),
+      is_active: ready, is_visible: true,
+    });
+  } catch (e) {}
+}
+function haptic(kind) {
+  if (!tg || !tg.HapticFeedback) return;
+  try { kind === "select" ? tg.HapticFeedback.selectionChanged() : tg.HapticFeedback.notificationOccurred(kind); } catch (e) {}
+}
+
+/* ---------- заказ ---------- */
+function orderPayload() {
+  // Только «сколько и кому»: цену бот считает сам и сумме из приложения не верит
+  return { t: "order", v: 2, stars: state.stars, to: state.user };
+}
+// Тот же заказ строкой: для ссылки t.me/бот?start=… (до 64 символов: буквы, цифры, _ и -)
+function startParam(o) { return `o_${o.stars}_${o.to}`; }
+
+function submit() {
+  if ($("cta").disabled && !(tg && mbReady)) return;
+  const o = orderPayload();
+  haptic("success");
+  // Mini App открыт кнопкой клавиатуры бота — sendData доставит заказ боту и закроет окно.
+  // Открыт иначе (кнопка под сообщением, меню, браузер) — sendData не сработает:
+  // через секунду покажем запасной путь — код заказа и ссылку на бота.
+  if (tg && !(tg.initDataUnsafe && tg.initDataUnsafe.query_id)) {
+    try { tg.sendData(JSON.stringify(o)); } catch (e) {}
+  }
+  setTimeout(() => showDone(o), tg ? 1200 : 0);
+}
+
+function showDone(o) {
+  $("shop").hidden = true; $("bar").hidden = true; $("done").hidden = false;
+  if (tg && tg.MainButton) { try { tg.MainButton.hide(); } catch (e) {} }
+  $("doneTitle").textContent = `${int(o.stars)} ⭐ для @${o.to}`;
+  $("doneText").textContent = `Примерно ${rub(quote(o.stars).total)} — точную сумму покажет бот`;
+  $("fallback").hidden = false;
+  $("orderCode").textContent = startParam(o);
+  const steps = [
+    "Отправьте заказ боту: «Открыть бота» откроет чат — нажмите «Запустить» или отправьте код.",
+    "Бот покажет заказ с точной суммой. Оплатите с баланса или через CryptoBot.",
+    "Подарки придут через несколько секунд после оплаты — обменяйте их на звёзды в профиле.",
+  ];
+  $("steps").innerHTML = steps.map((s) => `<li><span>${escapeHtml(s)}</span></li>`).join("");
+  window.scrollTo({ top: 0 });
+}
+
+$("openBot").addEventListener("click", () => {
+  const o = orderPayload();
+  const url = `https://t.me/${CONFIG.botUsername}?start=${encodeURIComponent(startParam(o))}`;
+  if (tg && tg.openTelegramLink) { try { tg.openTelegramLink(url); return; } catch (e) {} }
+  const a = document.createElement("a"); a.href = url; a.target = "_blank"; a.rel = "noopener"; a.click();
+});
+$("copyBtn").addEventListener("click", () => {
+  const text = $("orderCode").textContent;
+  const done = () => { $("copyBtn").textContent = "Скопировано"; setTimeout(() => ($("copyBtn").textContent = "Копировать"), 1600); };
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(done, () => selectCode());
+  } else selectCode();
+});
+function selectCode() {
+  const r = document.createRange(); r.selectNodeContents($("orderCode"));
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+$("backBtn").addEventListener("click", () => {
+  $("done").hidden = true; $("shop").hidden = false; $("bar").hidden = !!(tg && tg.MainButton);
+  render();
+});
+
+/* ---------- ввод ---------- */
+$("amount").addEventListener("input", (e) => {
+  const digits = e.target.value.replace(/\D/g, "").slice(0, 7);
+  e.target.value = digits;
+  state.stars = digits ? parseInt(digits, 10) : 0;
+  render();
+});
+$("amount").addEventListener("blur", () => {
+  if (!validStars(state.stars) && state.stars > 0) {
+    setStars(Math.min(CONFIG.maxStars, Math.max(CONFIG.minStars, state.stars)));
+  }
+});
+$("range").addEventListener("input", (e) => {
+  const n = fromRange(+e.target.value);
+  if (n !== state.stars) haptic("select");
+  state.stars = n; $("amount").value = String(n); render();
+});
+$("username").addEventListener("input", (e) => {
+  const clean = e.target.value.replace(/^@+/, "").replace(/[^A-Za-z0-9_]/g, "");
+  if (clean !== e.target.value) e.target.value = clean;
+  state.user = clean; render();
+});
+$("who").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.who = b.dataset.who;
+  document.querySelectorAll("#who button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  const me = tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.username;
+  state.user = state.who === "me" ? (me || "") : "";
+  $("username").value = state.user;
+  if (state.who === "friend") $("username").focus();
+  haptic("select"); render();
+});
+$("skins").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-s]"); if (b) { setSkin(b.dataset.s); haptic("select"); }
+});
+$("cta").addEventListener("click", submit);
+
+/* ---------- запуск ---------- */
+(function init() {
+  if (tg) {
+    try { tg.ready(); tg.expand(); } catch (e) {}
+    const me = tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.username;
+    if (me) { state.user = me; $("username").value = me; }
+    if (tg.MainButton) { $("bar").hidden = true; tg.MainButton.onClick(submit); }
+  } else {
+    // В браузере (предпросмотр) — пример получателя, чтобы был виден весь путь заказа
+    state.user = "example_user"; $("username").value = state.user;
+  }
+  let saved = null;
+  try { saved = localStorage.getItem("shop-skin"); } catch (e) {}
+  const fromLink = new URLSearchParams(location.search).get("skin");
+  renderStatic();
+  setSkin(fromLink || (CONFIG.showSkinPicker && saved) || CONFIG.defaultSkin);
+  setStars(state.stars);
+})();
+</script>
+</body>
+</html>
